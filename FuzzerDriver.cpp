@@ -90,6 +90,7 @@ static const size_t kNumFlags =
 static std::vector<std::string> *Inputs;
 static std::string *ProgName;
 
+// cjc: 打印帮助
 static void PrintHelp() {
   Printf("Usage:\n");
   auto Prog = ProgName->c_str();
@@ -117,6 +118,7 @@ static void PrintHelp() {
             "will be passed verbatim to subprocesses.\n");
 }
 
+// cjc: 从命令行参数中提取指定参数的值
 static const char *FlagValue(const char *Param, const char *Name) {
   size_t Len = strlen(Name);
   if (Param[0] == '-' && strstr(Param + 1, Name) == Param + 1 &&
@@ -125,6 +127,7 @@ static const char *FlagValue(const char *Param, const char *Name) {
   return nullptr;
 }
 
+// cjc: 将字符串转成long类型的整数
 // Avoid calling stol as it triggers a bug in clang/glibc build.
 static long MyStol(const char *Str) {
   long Res = 0;
@@ -142,6 +145,7 @@ static long MyStol(const char *Str) {
   return Res * Sign;
 }
 
+// cjc: 解析单个命令行参数
 static bool ParseOneFlag(const char *Param) {
   if (Param[0] != '-') return false;
   if (Param[1] == '-') {
@@ -187,6 +191,7 @@ static bool ParseOneFlag(const char *Param) {
   return true;
 }
 
+// cjc: 解析命令行参数
 // We don't use any library to minimize dependencies.
 static void ParseFlags(const std::vector<std::string> &Args,
                        const ExternalFunctions *EF) {
@@ -228,6 +233,7 @@ static void PulseThread() {
   }
 }
 
+// cjc: 并行工作现场管理
 static void WorkerThread(const Command &BaseCmd, std::atomic<unsigned> *Counter,
                          unsigned NumJobs, std::atomic<bool> *HasErrors) {
   while (true) {
@@ -251,6 +257,7 @@ static void WorkerThread(const Command &BaseCmd, std::atomic<unsigned> *Counter,
   }
 }
 
+// cjc: 验证字典目录有效
 static void ValidateDirectoryExists(const std::string &Path,
                                     bool CreateDirectory) {
   if (Path.empty()) {
@@ -284,6 +291,7 @@ std::string CloneArgsWithoutX(const std::vector<std::string> &Args,
   return Cmd;
 }
 
+// cjc: 并行处理
 static int RunInMultipleProcesses(const std::vector<std::string> &Args,
                                   unsigned NumWorkers, unsigned NumJobs) {
   std::atomic<unsigned> Counter(0);
@@ -494,6 +502,7 @@ int MinimizeCrashInput(const std::vector<std::string> &Args,
   return 0;
 }
 
+// cjc: 对已知崩溃输入进行最小化处理，找到最小输出集合 
 int MinimizeCrashInputInternalStep(Fuzzer *F, InputCorpus *Corpus) {
   assert(Inputs->size() == 1);
   std::string InputFilePath = Inputs->at(0);
@@ -510,6 +519,7 @@ int MinimizeCrashInputInternalStep(Fuzzer *F, InputCorpus *Corpus) {
   exit(0);
 }
 
+// cjc: 合并语料库中的测试用例
 void Merge(Fuzzer *F, FuzzingOptions &Options,
            const std::vector<std::string> &Args,
            const std::vector<std::string> &Corpora, const char *CFPathOrNull) {
@@ -518,8 +528,11 @@ void Merge(Fuzzer *F, FuzzingOptions &Options,
     exit(0);
   }
 
+  // 获取第一个语料库中的测试用例放到OldCorpus
   std::vector<SizedFile> OldCorpus, NewCorpus;
   GetSizedFilesFromDir(Corpora[0], &OldCorpus);
+
+  // 其他语料库的测试用例放到NewCorpus
   for (size_t i = 1; i < Corpora.size(); i++)
     GetSizedFilesFromDir(Corpora[i], &NewCorpus);
   std::sort(OldCorpus.begin(), OldCorpus.end());
@@ -528,8 +541,12 @@ void Merge(Fuzzer *F, FuzzingOptions &Options,
   std::string CFPath = CFPathOrNull ? CFPathOrNull : TempPath("Merge", ".txt");
   std::vector<std::string> NewFiles;
   std::set<uint32_t> NewFeatures, NewCov;
+
+  // 合并操作, 计算新的覆盖率特征和覆盖率信息
   CrashResistantMerge(Args, OldCorpus, NewCorpus, &NewFiles, {}, &NewFeatures,
                       {}, &NewCov, CFPath, true, Flags.set_cover_merge);
+
+  // 输出到新的语料库
   for (auto &Path : NewFiles)
     F->WriteToOutputCorpus(FileToVector(Path, Options.MaxLen));
   // We are done, delete the control file if it was a temporary one.
@@ -648,32 +665,44 @@ ReadCorpora(const std::vector<std::string> &CorpusDirs,
 // cjc: 入口
 int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   using namespace fuzzer;
+  // 断言错误
   assert(argc && argv && "Argument pointers cannot be nullptr");
+  // 获取命令行参数的第一个元素, 即执行程序
   std::string Argv0((*argv)[0]);
+
+  // 实例化外部函数
   EF = new ExternalFunctions();
   // cjc: 初始化Fuzzer
   if (EF->LLVMFuzzerInitialize)
     EF->LLVMFuzzerInitialize(argc, argv);
   if (EF->__msan_scoped_disable_interceptor_checks)
     EF->__msan_scoped_disable_interceptor_checks();
+  
+
   const std::vector<std::string> Args(*argv, *argv + *argc);
   assert(!Args.empty());
+
+  // 程序为空判断
   ProgName = new std::string(Args[0]);
   if (Argv0 != *ProgName) {
     Printf("ERROR: argv[0] has been modified in LLVMFuzzerInitialize\n");
     exit(1);
   }
+
+  // 解析参数
   ParseFlags(Args, EF);
   if (Flags.help) {
     PrintHelp();
     return 0;
   }
 
+  // close_fd_mask选项: 关闭标准输出/错误
   if (Flags.close_fd_mask & 2)
     DupAndCloseStderr();
   if (Flags.close_fd_mask & 1)
     CloseStdout();
 
+  // jobs和workers选项: 并行
   if (Flags.jobs > 0 && Flags.workers == 0) {
     Flags.workers = std::min(NumberOfCpuCores() / 2, Flags.jobs);
     if (Flags.workers > 1)
@@ -684,40 +713,41 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
     return RunInMultipleProcesses(Args, Flags.workers, Flags.jobs);
 
   FuzzingOptions Options;
-  Options.Verbosity = Flags.verbosity;
-  Options.MaxLen = Flags.max_len;
-  Options.LenControl = Flags.len_control;
-  Options.KeepSeed = Flags.keep_seed;
-  Options.UnitTimeoutSec = Flags.timeout;
-  Options.ErrorExitCode = Flags.error_exitcode;
-  Options.TimeoutExitCode = Flags.timeout_exitcode;
-  Options.IgnoreTimeouts = Flags.ignore_timeouts;
-  Options.IgnoreOOMs = Flags.ignore_ooms;
-  Options.IgnoreCrashes = Flags.ignore_crashes;
-  Options.MaxTotalTimeSec = Flags.max_total_time;
-  Options.DoCrossOver = Flags.cross_over;
-  Options.CrossOverUniformDist = Flags.cross_over_uniform_dist;
-  Options.MutateDepth = Flags.mutate_depth;
-  Options.ReduceDepth = Flags.reduce_depth;
-  Options.UseCounters = Flags.use_counters;
-  Options.UseMemmem = Flags.use_memmem;
-  Options.UseCmp = Flags.use_cmp;
-  Options.UseValueProfile = Flags.use_value_profile;
-  Options.Shrink = Flags.shrink;
-  Options.ReduceInputs = Flags.reduce_inputs;
-  Options.ShuffleAtStartUp = Flags.shuffle;
-  Options.PreferSmall = Flags.prefer_small;
-  Options.ReloadIntervalSec = Flags.reload;
-  Options.OnlyASCII = Flags.only_ascii;
-  Options.DetectLeaks = Flags.detect_leaks;
-  Options.PurgeAllocatorIntervalSec = Flags.purge_allocator_interval;
-  Options.TraceMalloc = Flags.trace_malloc;
-  Options.RssLimitMb = Flags.rss_limit_mb;
-  Options.MallocLimitMb = Flags.malloc_limit_mb;
+  Options.Verbosity = Flags.verbosity; // 输出详细日志
+  Options.MaxLen = Flags.max_len; // 测试用例的最大长度
+  Options.LenControl = Flags.len_control; // 输入长度的增长速率
+  Options.KeepSeed = Flags.keep_seed; // 将种子保留在语料库中
+  Options.UnitTimeoutSec = Flags.timeout; // 单元测试的运行时间
+  Options.ErrorExitCode = Flags.error_exitcode; // 错误退出码
+  Options.TimeoutExitCode = Flags.timeout_exitcode; // 超时退出码
+  Options.IgnoreTimeouts = Flags.ignore_timeouts; // 在fork模式下，忽略超时
+  Options.IgnoreOOMs = Flags.ignore_ooms; // 在fork模式下，忽略oom
+  Options.IgnoreCrashes = Flags.ignore_crashes; // 在fork模式下，忽略crash
+  Options.MaxTotalTimeSec = Flags.max_total_time; // 运行模糊测试的最大总时间(s)
+  Options.DoCrossOver = Flags.cross_over; // 交叉操作
+  Options.CrossOverUniformDist = Flags.cross_over_uniform_dist; // 交叉输入使用均匀概率分布
+  Options.MutateDepth = Flags.mutate_depth; // 变异次数
+  Options.ReduceDepth = Flags.reduce_depth; // 减少变异次数
+  Options.UseCounters = Flags.use_counters; // 使用覆盖计数器
+  Options.UseMemmem = Flags.use_memmem; // 使用内存函数指导fuzzer
+  Options.UseCmp = Flags.use_cmp; // 使用cmp来变异
+  Options.UseValueProfile = Flags.use_value_profile; // 值配置文件引导fuzzer
+  Options.Shrink = Flags.shrink; // 缩小语料库输入
+  Options.ReduceInputs = Flags.reduce_inputs; // 尝试减小输入大小, 同时保留其完整的特征集
+  Options.ShuffleAtStartUp = Flags.shuffle; // 输入随机排序
+  Options.PreferSmall = Flags.prefer_small; // 输入排序优先较小的输入
+  Options.ReloadIntervalSec = Flags.reload; // 重新加载语料库的时间间隔
+  Options.OnlyASCII = Flags.only_ascii; // 输入只为ascii
+  Options.DetectLeaks = Flags.detect_leaks; // 内存泄露，lsan
+  Options.PurgeAllocatorIntervalSec = Flags.purge_allocator_interval; // 清除分配器缓存时间间隔
+  Options.TraceMalloc = Flags.trace_malloc; // 打印malloc/free和堆栈跟踪操作
+  Options.RssLimitMb = Flags.rss_limit_mb; // 内存使用限制
+  Options.MallocLimitMb = Flags.malloc_limit_mb; // 分配内存最大限制
 
   if (!Options.MallocLimitMb)
     Options.MallocLimitMb = Options.RssLimitMb;
 
+  // 单个测试用例执行次数
   if (Flags.runs >= 0)
     Options.MaxNumberOfRuns = Flags.runs;
 
@@ -731,6 +761,7 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
     }
   }
 
+  // 超时则报告最慢的单元
   Options.ReportSlowUnits = Flags.report_slow_units;
   if (Flags.artifact_prefix) {
     Options.ArtifactPrefix = Flags.artifact_prefix;
@@ -846,22 +877,23 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   StartRssThread(F, Flags.rss_limit_mb);
 #endif // LIBFUZZER_EMSCRIPTEN
 
-  Options.HandleAbrt = Flags.handle_abrt;
-  Options.HandleAlrm = !Flags.minimize_crash;
-  Options.HandleBus = Flags.handle_bus;
-  Options.HandleFpe = Flags.handle_fpe;
-  Options.HandleIll = Flags.handle_ill;
-  Options.HandleInt = Flags.handle_int;
-  Options.HandleSegv = Flags.handle_segv;
-  Options.HandleTerm = Flags.handle_term;
-  Options.HandleXfsz = Flags.handle_xfsz;
-  Options.HandleUsr1 = Flags.handle_usr1;
-  Options.HandleUsr2 = Flags.handle_usr2;
+  Options.HandleAbrt = Flags.handle_abrt; // 拦截信号SIGABRT
+  Options.HandleAlrm = !Flags.minimize_crash; // 拦截信号SIGALRM
+  Options.HandleBus = Flags.handle_bus; // 拦截信号SIGBUS
+  Options.HandleFpe = Flags.handle_fpe; // 拦截信号SIGFPE
+  Options.HandleIll = Flags.handle_ill; // 拦截信号SIGILL
+  Options.HandleInt = Flags.handle_int; // 拦截信号SIGINT
+  Options.HandleSegv = Flags.handle_segv; // 拦截信号SIGSEGV
+  Options.HandleTerm = Flags.handle_term; // 拦截信号SIGTERM
+  Options.HandleXfsz = Flags.handle_xfsz; // 拦截信号SIGXFSZ
+  Options.HandleUsr1 = Flags.handle_usr1; // 拦截信号SIGUSR1
+  Options.HandleUsr2 = Flags.handle_usr2; // 拦截信号SIGUSR2
   Options.HandleWinExcept = Flags.handle_winexcept;
 
   // cjc: 初始化信号捕获回调函数
   SetSignalHandler(Options);
 
+  // cjc: 注册退出回调函数
   std::atexit(Fuzzer::StaticExitCallback);
 
   if (Flags.minimize_crash)
