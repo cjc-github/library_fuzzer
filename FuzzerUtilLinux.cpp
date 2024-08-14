@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // Misc utils for Linux.
 //===----------------------------------------------------------------------===//
+// cjc: 针对Linux实现的杂项工具
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_LINUX || LIBFUZZER_NETBSD || LIBFUZZER_FREEBSD ||                \
     LIBFUZZER_EMSCRIPTEN

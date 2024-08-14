@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // Misc utils implementation using Posix API.
 //===----------------------------------------------------------------------===//
+// cjc: 针对Posix api实现的杂项工具
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_POSIX
 #include "FuzzerIO.h"

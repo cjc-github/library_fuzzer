@@ -10,6 +10,8 @@
 // requires that clients of LibFuzzer pass ``--export-dynamic`` to the linker.
 // That is a complication we don't wish to expose to clients right now.
 //===----------------------------------------------------------------------===//
+// cjc: 苹果平台上使用的外部函数
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_APPLE
 

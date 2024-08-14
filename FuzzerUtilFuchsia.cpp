@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // Misc utils implementation using Fuchsia/Zircon APIs.
 //===----------------------------------------------------------------------===//
+// cjc: 使用Fuchsia/Zircon API实现的杂项工具
+
 #include "FuzzerPlatform.h"
 
 #if LIBFUZZER_FUCHSIA

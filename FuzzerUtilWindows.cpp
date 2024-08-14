@@ -7,6 +7,9 @@
 //===----------------------------------------------------------------------===//
 // Misc utils implementation for Windows.
 //===----------------------------------------------------------------------===//
+// cjc: Windows杂项
+
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_WINDOWS
 #include "FuzzerCommand.h"

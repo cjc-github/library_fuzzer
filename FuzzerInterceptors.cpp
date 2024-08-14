@@ -8,6 +8,7 @@
 // Intercept certain libc functions to aid fuzzing.
 // Linked only when other RTs that define their own interceptors are not linked.
 //===----------------------------------------------------------------------===//
+// cjc: 拦截器, 拦截某些libc函数以帮助实现模糊测试
 
 #include "FuzzerPlatform.h"
 

@@ -10,6 +10,8 @@
 // the callback required for -fsanitize-coverage=trace-pc-guard instrumentation.
 //
 //===----------------------------------------------------------------------===//
+// cjc: 跟踪pc
+
 
 #include "FuzzerTracePC.h"
 #include "FuzzerBuiltins.h"

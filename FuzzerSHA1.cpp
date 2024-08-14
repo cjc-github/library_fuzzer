@@ -14,6 +14,8 @@
 // openssl may not be available and because we may be fuzzing openssl itself.
 // For the same reason we do not want to depend on SHA1 from LLVM tree.
 //===----------------------------------------------------------------------===//
+// cjc: 使用sha1加密算法
+
 
 #include "FuzzerSHA1.h"
 #include "FuzzerDefs.h"

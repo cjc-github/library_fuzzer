@@ -9,6 +9,8 @@
 // compiled with MSVC. Uses weak aliases when compiled with clang. Unfortunately
 // the method each compiler supports is not supported by the other.
 //===----------------------------------------------------------------------===//
+// cjc: Windows平台上使用的外部函数
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_WINDOWS
 

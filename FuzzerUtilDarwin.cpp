@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // Misc utils for Darwin.
 //===----------------------------------------------------------------------===//
+// cjc: 用于Darwin的杂项
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_APPLE
 #include "FuzzerCommand.h"

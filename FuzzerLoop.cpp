@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 // Fuzzer's main loop.
 //===----------------------------------------------------------------------===//
+// cjc: Libfuzzer的主循环流程
 
 #include "FuzzerCorpus.h"
 #include "FuzzerIO.h"
@@ -121,6 +122,7 @@ void FreeHook(const volatile void *ptr) {
   }
 }
 
+// cjc: oom问题
 // Crash on a single malloc that exceeds the rss limit.
 void Fuzzer::HandleMalloc(size_t Size) {
   if (!Options.MallocLimitMb || (Size >> 20) < (size_t)Options.MallocLimitMb)
@@ -132,6 +134,7 @@ void Fuzzer::HandleMalloc(size_t Size) {
   DumpCurrentUnit("oom-");
   Printf("SUMMARY: libFuzzer: out-of-memory\n");
   PrintFinalStats();
+  // cjc: libfuzzer遇见oom, 会给出退出信号
   _Exit(Options.OOMExitCode); // Stop right now.
 }
 
@@ -140,12 +143,14 @@ Fuzzer::Fuzzer(UserCallback CB, InputCorpus &Corpus, MutationDispatcher &MD,
     : CB(CB), Corpus(Corpus), MD(MD), Options(Options) {
   if (EF->__sanitizer_set_death_callback)
     EF->__sanitizer_set_death_callback(StaticDeathCallback);
+
   assert(!F);
   F = this;
   TPC.ResetMaps();
   IsMyThread = true;
   if (Options.DetectLeaks && EF->__sanitizer_install_malloc_and_free_hooks)
     EF->__sanitizer_install_malloc_and_free_hooks(MallocHook, FreeHook);
+
   TPC.SetUseCounters(Options.UseCounters);
   TPC.SetUseValueProfileMask(Options.UseValueProfile);
 
@@ -171,6 +176,7 @@ void Fuzzer::StaticDeathCallback() {
   F->DeathCallback();
 }
 
+// cjc:将当前crash测试用例的执行日志打印出来
 void Fuzzer::DumpCurrentUnit(const char *Prefix) {
   if (!CurrentUnitData)
     return; // Happens when running individual inputs.
@@ -223,6 +229,7 @@ void Fuzzer::StaticFileSizeExceedCallback() {
   exit(1);
 }
 
+// cjc: crash回调函数
 void Fuzzer::CrashCallback() {
   if (EF->__sanitizer_acquire_crash_state &&
       !EF->__sanitizer_acquire_crash_state())
@@ -235,9 +242,11 @@ void Fuzzer::CrashCallback() {
   Printf("SUMMARY: libFuzzer: deadly signal\n");
   DumpCurrentUnit("crash-");
   PrintFinalStats();
+  // cjc: libfuzzer遇见crash, 给出退出信号
   _Exit(Options.ErrorExitCode); // Stop right now.
 }
 
+// cjc: 退出回调函数
 void Fuzzer::ExitCallback() {
   if (!RunningUserCallback)
     return; // This exit did not come from the user callback
@@ -249,6 +258,7 @@ void Fuzzer::ExitCallback() {
   Printf("SUMMARY: libFuzzer: fuzz target exited\n");
   DumpCurrentUnit("crash-");
   PrintFinalStats();
+  // cjc: libfuzzer遇见错误，给出退出信号
   _Exit(Options.ErrorExitCode);
 }
 
@@ -265,6 +275,7 @@ int Fuzzer::InterruptExitCode() {
   return F->Options.InterruptExitCode;
 }
 
+// cjc: 中断回调函数
 void Fuzzer::InterruptCallback() {
   Printf("==%lu== libFuzzer: run interrupted; exiting\n", GetPid());
   PrintFinalStats();
@@ -304,10 +315,12 @@ void Fuzzer::AlarmCallback() {
     PrintStackTrace();
     Printf("SUMMARY: libFuzzer: timeout\n");
     PrintFinalStats();
+    // cjc: libfuzzer遇见超时, 会给出退出信号
     _Exit(Options.TimeoutExitCode); // Stop right now.
   }
 }
 
+// cjc: oom问题
 void Fuzzer::RssLimitCallback() {
   if (EF->__sanitizer_acquire_crash_state &&
       !EF->__sanitizer_acquire_crash_state())
@@ -319,9 +332,11 @@ void Fuzzer::RssLimitCallback() {
   DumpCurrentUnit("oom-");
   Printf("SUMMARY: libFuzzer: out-of-memory\n");
   PrintFinalStats();
+  // cjc: libfuzzer遇见oom, 给出退出信号
   _Exit(Options.OOMExitCode); // Stop right now.
 }
 
+// cjc: 打印状态,应该保存到文件中
 void Fuzzer::PrintStats(const char *Where, const char *End, size_t Units,
                         size_t Features) {
   size_t ExecPerSec = execPerSec();
@@ -505,6 +520,7 @@ static void WriteEdgeToMutationGraphFile(const std::string &MutationGraphFile,
   AppendToFile(OutputString, MutationGraphFile);
 }
 
+// cjc: 执行单个测试用例
 bool Fuzzer::RunOne(const uint8_t *Data, size_t Size, bool MayDeleteFile,
                     InputInfo *II, bool ForceAddToCorpus,
                     bool *FoundUniqFeatures) {
@@ -513,12 +529,15 @@ bool Fuzzer::RunOne(const uint8_t *Data, size_t Size, bool MayDeleteFile,
   // Largest input length should be INT_MAX.
   assert(Size < std::numeric_limits<uint32_t>::max());
 
+  // cjc: 调用到LLVMFuzzerTestOneInput()
   if(!ExecuteCallback(Data, Size)) return false;
   auto TimeOfUnit = duration_cast<microseconds>(UnitStopTime - UnitStartTime);
 
   UniqFeatureSetTmp.clear();
   size_t FoundUniqFeaturesOfII = 0;
+  // cjc: 从SanitizerCoverage插桩记录的信息中获取分支数据
   size_t NumUpdatesBefore = Corpus.NumFeatureUpdates();
+
   TPC.CollectFeatures([&](uint32_t Feature) {
     if (Corpus.AddFeature(Feature, static_cast<uint32_t>(Size), Options.Shrink))
       UniqFeatureSetTmp.push_back(Feature);
@@ -529,9 +548,12 @@ bool Fuzzer::RunOne(const uint8_t *Data, size_t Size, bool MayDeleteFile,
                              II->UniqFeatureSet.end(), Feature))
         FoundUniqFeaturesOfII++;
   });
+
   if (FoundUniqFeatures)
     *FoundUniqFeatures = FoundUniqFeaturesOfII;
   PrintPulseAndReportSlowInput(Data, Size);
+
+  // cjc: 计算发现了多少新分支路径
   size_t NumNewFeatures = Corpus.NumFeatureUpdates() - NumUpdatesBefore;
   if (NumNewFeatures || ForceAddToCorpus) {
     TPC.UpdateObservedPCs();
@@ -566,6 +588,7 @@ size_t Fuzzer::GetCurrentUnitInFuzzingThead(const uint8_t **Data) const {
   return CurrentUnitSize;
 }
 
+// cjc: crash重写
 void Fuzzer::CrashOnOverwrittenData() {
   Printf("==%d== ERROR: libFuzzer: fuzz target overwrites its const input\n",
          GetPid());
@@ -573,6 +596,7 @@ void Fuzzer::CrashOnOverwrittenData() {
   Printf("SUMMARY: libFuzzer: overwrites-const-input\n");
   DumpCurrentUnit("crash-");
   PrintFinalStats();
+  // cjc: 停止libfuzzer
   _Exit(Options.ErrorExitCode); // Stop right now.
 }
 
@@ -588,6 +612,7 @@ static bool LooseMemeq(const uint8_t *A, const uint8_t *B, size_t Size) {
 
 // This method is not inlined because it would cause a test to fail where it
 // is part of the stack unwinding. See D97975 for details.
+// cjc: 非内联方法, 执行被测函数
 ATTRIBUTE_NOINLINE bool Fuzzer::ExecuteCallback(const uint8_t *Data,
                                                 size_t Size) {
   TPC.RecordInitialStack();
@@ -624,6 +649,7 @@ ATTRIBUTE_NOINLINE bool Fuzzer::ExecuteCallback(const uint8_t *Data,
   return CBRes == 0;
 }
 
+// cjc: 保存语料库
 std::string Fuzzer::WriteToOutputCorpus(const Unit &U) {
   if (Options.OnlyASCII)
     assert(IsASCII(U));
@@ -636,6 +662,7 @@ std::string Fuzzer::WriteToOutputCorpus(const Unit &U) {
   return Path;
 }
 
+// cjc: 发现crash后保存到目录中
 void Fuzzer::WriteUnitToFileWithPrefix(const Unit &U, const char *Prefix) {
   if (!Options.SaveArtifacts)
     return;
@@ -711,19 +738,25 @@ void Fuzzer::TryDetectingAMemoryLeak(const uint8_t *Data, size_t Size,
     CurrentUnitSize = Size;
     DumpCurrentUnit("leak-");
     PrintFinalStats();
+    // cjc: 退出
     _Exit(Options.ErrorExitCode); // not exit() to disable lsan further on.
   }
 }
 
+// cjc: 核心代码, 生成测试用例并执行
 void Fuzzer::MutateAndTestOne() {
+  // cjc: 清空突变序列
   MD.StartMutationSequence();
 
+  // cjc: 交叉测试, 挑选测试用例
   auto &II = Corpus.ChooseUnitToMutate(MD.GetRand());
   if (Options.DoCrossOver) {
     auto &CrossOverII = Corpus.ChooseUnitToCrossOverWith(
         MD.GetRand(), Options.CrossOverUniformDist);
     MD.SetCrossOverWith(&CrossOverII.U);
   }
+  
+  // cjc: 复制单元U, 并保存sha1, 获取测试用例
   const auto &U = II.U;
   memcpy(BaseSha1, II.Sha1, sizeof(BaseSha1));
   assert(CurrentUnitData);
@@ -733,10 +766,12 @@ void Fuzzer::MutateAndTestOne() {
 
   assert(MaxMutationLen > 0);
 
+  // cjc: 确定突变最大长度
   size_t CurrentMaxMutationLen =
       Min(MaxMutationLen, Max(U.size(), TmpMaxMutationLen));
   assert(CurrentMaxMutationLen > 0);
 
+  // cjc: 执行突变和测试
   for (int i = 0; i < Options.MutateDepth; i++) {
     if (TotalNumberOfRuns >= Options.MaxNumberOfRuns)
       break;
@@ -756,15 +791,20 @@ void Fuzzer::MutateAndTestOne() {
     II.NumExecutedMutations++;
     Corpus.IncrementNumExecutedMutations();
 
+    // cjc: 新覆盖点
     bool FoundUniqFeatures = false;
     bool NewCov = RunOne(CurrentUnitData, Size, /*MayDeleteFile=*/true, &II,
                          /*ForceAddToCorpus*/ false, &FoundUniqFeatures);
     TryDetectingAMemoryLeak(CurrentUnitData, Size,
                             /*DuringInitialCorpusExecution*/ false);
     if (NewCov) {
+      // cjc: 打印出新路径
+      // 例如: #269	NEW    cov: 5 ft: 5 corp: 3/8b lim: 6 exec/s: 0 rss: 31Mb L: 4/4 MS: 2 CrossOver-CMP- DE: "F\000\000\000"-
       ReportNewCoverage(&II, {CurrentUnitData, CurrentUnitData + Size});
       break;  // We will mutate this input more in the next rounds.
     }
+
+    // cjc: 未发现新覆盖率，但开启了ReduceDepth选项
     if (Options.ReduceDepth && !FoundUniqFeatures)
       break;
   }
@@ -772,6 +812,7 @@ void Fuzzer::MutateAndTestOne() {
   II.NeedsEnergyUpdate = true;
 }
 
+// cjc: 定期清理内存分配器
 void Fuzzer::PurgeAllocator() {
   if (Options.PurgeAllocatorIntervalSec < 0 || !EF->__sanitizer_purge_allocator)
     return;
@@ -859,11 +900,13 @@ void Fuzzer::ReadAndExecuteSeedCorpora(std::vector<SizedFile> &CorporaFiles) {
   }
 }
 
+// 执行循环
 void Fuzzer::Loop(std::vector<SizedFile> &CorporaFiles) {
   auto FocusFunctionOrAuto = Options.FocusFunction;
   DFT.Init(Options.DataFlowTrace, &FocusFunctionOrAuto, CorporaFiles,
            MD.GetRand());
   TPC.SetFocusFunction(FocusFunctionOrAuto);
+  // cjc: 执行种子
   ReadAndExecuteSeedCorpora(CorporaFiles);
   DFT.Clear();  // No need for DFT any more.
   TPC.SetPrintNewPCs(Options.PrintNewCovPcs);
@@ -875,20 +918,28 @@ void Fuzzer::Loop(std::vector<SizedFile> &CorporaFiles) {
 
   while (true) {
     auto Now = system_clock::now();
+    // cjc: 检查是否存在stopfile,存在且不为空，则退出循环
     if (!Options.StopFile.empty() &&
         !FileToVector(Options.StopFile, 1, false).empty())
       break;
+
+    // cjc: 加载语料库
     if (duration_cast<seconds>(Now - LastCorpusReload).count() >=
         Options.ReloadIntervalSec) {
       RereadOutputCorpus(MaxInputLen);
       LastCorpusReload = system_clock::now();
     }
+    
+    // cjc: 最大运行次数
     if (TotalNumberOfRuns >= Options.MaxNumberOfRuns)
       break;
+
+    // cjc: 是否超时
     if (TimedOut())
       break;
+    
 
-    // Update TmpMaxMutationLen
+    // cjc: Update TmpMaxMutationLen, 更新突变的最大长度
     if (Options.LenControl) {
       if (TmpMaxMutationLen < MaxMutationLen &&
           TotalNumberOfRuns - LastCorpusUpdateRun >
@@ -902,6 +953,7 @@ void Fuzzer::Loop(std::vector<SizedFile> &CorporaFiles) {
     }
 
     // Perform several mutations and runs.
+    // cjc: 执行突变测试, 待修改使其持续fuzz
     MutateAndTestOne();
 
     PurgeAllocator();

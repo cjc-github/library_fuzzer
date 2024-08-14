@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // IO functions implementation using Posix API.
 //===----------------------------------------------------------------------===//
+// cjc: 针对Posix API实现的IO函数
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_POSIX || LIBFUZZER_FUCHSIA
 

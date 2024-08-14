@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // IO functions implementation for Windows.
 //===----------------------------------------------------------------------===//
+// cjc: 针对windows实现的IO函数
+
 #include "FuzzerPlatform.h"
 #if LIBFUZZER_WINDOWS
 

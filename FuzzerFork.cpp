@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 // Spawn and orchestrate separate fuzzing processes.
 //===----------------------------------------------------------------------===//
+// cjc: fork进程并管理这些进程
+
 
 #include "FuzzerCommand.h"
 #include "FuzzerFork.h"

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 // FuzzerDriver and flag parsing.
 //===----------------------------------------------------------------------===//
+// cjc: Fuzzer运行
 
 #include "FuzzerCommand.h"
 #include "FuzzerCorpus.h"
@@ -304,8 +305,10 @@ static int RunInMultipleProcesses(const std::vector<std::string> &Args,
   return HasErrors ? 1 : 0;
 }
 
+// cjc: 定期监控内存占用情况
 static void RssThread(Fuzzer *F, size_t RssLimitMb) {
   while (true) {
+    // cjc: 每隔1秒就获取当前Fuzzer进程的峰值内存占用
     SleepSeconds(1);
     size_t Peak = GetPeakRSSMb();
     if (Peak > RssLimitMb)
@@ -313,6 +316,7 @@ static void RssThread(Fuzzer *F, size_t RssLimitMb) {
   }
 }
 
+// cjc: 启动一个新线程来监控内存占用
 static void StartRssThread(Fuzzer *F, size_t RssLimitMb) {
   if (!RssLimitMb)
     return;
@@ -641,11 +645,13 @@ ReadCorpora(const std::vector<std::string> &CorpusDirs,
   return SizedFiles;
 }
 
+// cjc: 入口
 int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   using namespace fuzzer;
   assert(argc && argv && "Argument pointers cannot be nullptr");
   std::string Argv0((*argv)[0]);
   EF = new ExternalFunctions();
+  // cjc: 初始化Fuzzer
   if (EF->LLVMFuzzerInitialize)
     EF->LLVMFuzzerInitialize(argc, argv);
   if (EF->__msan_scoped_disable_interceptor_checks)
@@ -708,10 +714,13 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   Options.TraceMalloc = Flags.trace_malloc;
   Options.RssLimitMb = Flags.rss_limit_mb;
   Options.MallocLimitMb = Flags.malloc_limit_mb;
+
   if (!Options.MallocLimitMb)
     Options.MallocLimitMb = Options.RssLimitMb;
+
   if (Flags.runs >= 0)
     Options.MaxNumberOfRuns = Flags.runs;
+
   if (!Inputs->empty() && !Flags.minimize_crash_internal_step) {
     // Ensure output corpus assumed to be the first arbitrary argument input
     // is not a path to an existing file.
@@ -721,6 +730,7 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
       ValidateDirectoryExists(Options.OutputCorpus, Flags.create_missing_dirs);
     }
   }
+
   Options.ReportSlowUnits = Flags.report_slow_units;
   if (Flags.artifact_prefix) {
     Options.ArtifactPrefix = Flags.artifact_prefix;
@@ -734,17 +744,21 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
     }
     ValidateDirectoryExists(ArtifactPathDir, Flags.create_missing_dirs);
   }
+
   if (Flags.exact_artifact_path) {
     Options.ExactArtifactPath = Flags.exact_artifact_path;
     ValidateDirectoryExists(DirName(Options.ExactArtifactPath),
                             Flags.create_missing_dirs);
   }
+
   std::vector<Unit> Dictionary;
   if (Flags.dict)
     if (!ParseDictionaryFile(FileToString(Flags.dict), &Dictionary))
       return 1;
+
   if (Flags.verbosity > 0 && !Dictionary.empty())
     Printf("Dictionary: %zd entries\n", Dictionary.size());
+
   bool RunIndividualFiles = AllInputsAreFiles();
   Options.SaveArtifacts =
       !RunIndividualFiles || Flags.minimize_crash_internal_step;
@@ -754,6 +768,7 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   Options.PrintCorpusStats = Flags.print_corpus_stats;
   Options.PrintCoverage = Flags.print_coverage;
   Options.PrintFullCoverage = Flags.print_full_coverage;
+
   if (Flags.exit_on_src_pos)
     Options.ExitOnSrcPos = Flags.exit_on_src_pos;
   if (Flags.exit_on_item)
@@ -772,12 +787,14 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
     Options.CollectDataFlow = Flags.collect_data_flow;
   if (Flags.stop_file)
     Options.StopFile = Flags.stop_file;
+
   Options.Entropic = Flags.entropic;
   Options.EntropicFeatureFrequencyThreshold =
       (size_t)Flags.entropic_feature_frequency_threshold;
   Options.EntropicNumberOfRarestFeatures =
       (size_t)Flags.entropic_number_of_rarest_features;
   Options.EntropicScalePerExecTime = Flags.entropic_scale_per_exec_time;
+
   if (!Options.FocusFunction.empty())
     Options.Entropic = false; // FocusFunction overrides entropic scheduling.
   if (Options.Entropic)
@@ -810,8 +827,12 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   }
 
   Random Rand(Seed);
+  // cjc: 数据变异生成器
   auto *MD = new MutationDispatcher(Rand, Options);
+  // cjc: 数据语料库
   auto *Corpus = new InputCorpus(Options.OutputCorpus, Entropic);
+
+  // fUZZER核心逻辑模块
   auto *F = new Fuzzer(Callback, *Corpus, *MD, Options);
 
   for (auto &U: Dictionary)
@@ -820,6 +841,7 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
 
       // Threads are only supported by Chrome. Don't use them with emscripten
       // for now.
+// cjc: 线程监控程序
 #if !LIBFUZZER_EMSCRIPTEN
   StartRssThread(F, Flags.rss_limit_mb);
 #endif // LIBFUZZER_EMSCRIPTEN
@@ -837,6 +859,7 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   Options.HandleUsr2 = Flags.handle_usr2;
   Options.HandleWinExcept = Flags.handle_winexcept;
 
+  // cjc: 初始化信号捕获回调函数
   SetSignalHandler(Options);
 
   std::atexit(Fuzzer::StaticExitCallback);
@@ -911,6 +934,8 @@ int FuzzerDriver(int *argc, char ***argv, UserCallback Callback) {
   }
 
   auto CorporaFiles = ReadCorpora(*Inputs, ParseSeedInuts(Flags.seed_inputs));
+
+  // 执行循环
   F->Loop(CorporaFiles);
 
   if (Flags.verbosity)

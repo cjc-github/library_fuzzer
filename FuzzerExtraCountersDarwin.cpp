@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 // Extra coverage counters defined by user code for Darwin.
 //===----------------------------------------------------------------------===//
+// cjc: Darwin用户代码的额外覆盖率计数器
 
 #include "FuzzerPlatform.h"
 #include <cstdint>
