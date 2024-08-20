@@ -1,0 +1,67 @@
+[package]
+name = "xfl"
+version = "0.0.1"
+edition = "2021"
+default-run = "client"
+
+[dependencies]
+chrono = "0.4.31"
+futures = "0.3.29"
+lazy_static = "1.4.0"
+tonic = { version = "0.10" }
+prost = "0.12"
+prost-types = "0.12.1"
+tokio = { version = "1.38.1", features = [
+    "macros",
+    "rt-multi-thread",
+    "rt",
+    "full",
+] }
+tokio-util = "0.7"
+signal-hook = "0.3.17"
+
+tonic-health = "0.10.2"
+clap = { version = "4.4", features = ["derive"] }
+log = "0.4.20"
+log4rs = "1.2.0"
+rand = "0.8.5"
+rs-snowflake = "0.6.0"
+num_cpus = "1.16.0"
+mac_address = "1.1.5"
+
+crossterm = { version = "0.28.1", features = ["event-stream"] }
+ratatui = { version = "0.27.0", features = ["macros"] }
+serde = { version = "1.0.188", features = ["derive"] }
+#serde_json = "1.0.107"
+anyhow = { version = "1.0", features = ["backtrace"] }
+async-trait = "0.1"
+tempfile = "3.8.0"
+uuid = { version = "1.4", features = ["serde", "v4"] }
+tracing = "0.1.40"
+async-await = "0.2.1"
+regex = "1.9.1"
+#anyhow = "1.0.75"
+
+[build-dependencies]
+tonic-build = "0.10"
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = [
+    "async_futures",
+    # "async_tokio",
+    "html_reports",
+] }
+
+# [[bench]]
+# name = "bench_main"
+# harness = false
+
+# 编译服务端
+[[bin]]
+name = "client"
+path = "src/bin/client.rs"
+
+# [features]
+# default = ["linechart"]
+# linechart = []
+

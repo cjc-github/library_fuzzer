@@ -1,0 +1,313 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "io.grpc.examples.grpc_scheduler";
+option java_outer_classname = "grpc_scheduler";
+option objc_class_prefix = "HLW";
+
+package grpc_scheduler;
+
+// The greeting service definition.
+service SchedulerService {
+  // ===================== 通用接口 ==================================
+  // 注册请求
+  rpc Register (RegisterRequest) returns (RegisterResponse);
+  // 注销请求
+  rpc Unregister (UnregisterRequest) returns (UnregisterResponse);
+
+  // 状态报告请求
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+
+  // ===================== AFL系列 ==================================
+  // 向服务端发出拉取种子请求，服务端根据调度算法返回一个或多个种子数据
+  rpc GetSeeds (GetSeedsRequest) returns (GetSeedsResponse);
+  // 向服务端提交一个种子数据
+  rpc PutSeed (PutSeedRequest) returns (PutSeedResponse);
+
+  // 推送初始覆盖率
+  rpc PutInitCoverage (PutInitCoverageRequest) returns (PutInitCoverageResponse);
+  // 拉取初始覆盖率
+  rpc GetInitCoverage (GetInitCoverageRequest) returns (GetInitCoverageResponse);
+  
+  // 推送局部覆盖率
+  rpc PutCoverage (PutCoverageRequest) returns (PutCoverageResponse);
+  // 拉取全局覆盖率
+  rpc GetCoverage (GetCoverageRequest) returns (GetCoverageResponse);
+
+  // ===================== ixFuzz系列 ==================================
+  //
+  rpc PutSeedIX (PutSeedixRequest) returns (PutSeedResponse);
+  rpc GetSeedsIX (GetSeedsRequest) returns (GetSeedsixResponse);
+}
+
+// ===================== 通用接口配置 ==================================
+
+// 模糊测试工具分类
+enum FuzzerType{
+  // 未指定类别
+  FUZZER_UNKNOWN = 0;
+  // AFL
+  FUZZER_AFL = 1;
+  // Angora
+  FUZZER_ANGORA = 2;
+  // QSYM
+  FUZZER_QSYM = 3;
+  // LIBFUZZER
+  FUZZER_LIBFUZZER = 4;
+  // HONGGFUZZ
+  FUZZER_HONGGFUZZ = 5;
+  // AFLFast
+  FUZZER_AFLFAST = 6;
+  // FairFuzz
+  FUZZER_FAIRFUZZ = 7;
+  // Radamsa
+  FUZZER_RADAMSA = 8;
+  // IXFUZZ
+  FUZZER_IXFUZZ = 9;
+}
+
+// 模糊器信息，一个模糊器即一个客户端
+message Fuzzer{
+  // 模糊器编号
+  uint64 id = 1;
+  // 模糊器类型
+  FuzzerType fuzzer_type = 2;
+  // 模糊器已执行数
+  uint64 exec = 3;
+  //
+  double present_exec = 4;
+  // 模糊器的局部覆盖率位图
+  uint64 bitmap_size = 5;
+  // 真实位图
+  uint64 real_bitmap_size =6;
+  // 最近报告时间，心跳将更新该字段
+  // 调用前需将时间戳转换为uint64数据
+  // 此处的时间戳对应于C语言中的struct timespec数据结构。
+  uint64 timestamp = 7;
+  // 模糊器所属计算节点
+  uint64 compute_node_id = 8;
+  // 新增开始时间
+  uint64 start_timestamp = 9;
+}
+
+// 计算节点
+message ComputeNode{
+  // 计算节点编号
+  uint64 id = 1;
+  // 计算节点IP地址
+  string ipaddr = 2;
+  // 计算节点CPU核心数
+  uint32 cores = 3;
+  // 计算节点可用内存数
+  uint64 mem_size = 4;
+}
+
+// 客户端发出的注册请求消息
+message RegisterRequest {
+  // 模糊器
+  Fuzzer fuzzer = 1;
+  // 所属计算节点
+  ComputeNode compute_node = 2;
+}
+
+// 注册响应消息，成功则返回服务端分配的模糊器编号和服务器编号
+message RegisterResponse {
+  // 是否成功
+  bool success = 1;
+  // 分配的模糊器编号
+  uint64 fuzzer_id = 2;
+  // 分配的计算节点编号，如已分配则为原值
+  uint64 compute_node_id = 3;
+}
+
+// 客户端发出的注销请求消息，服务端根据fuzzer_id检索客户端列表
+message UnregisterRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+}
+
+// 注销响应消息 - 注销是否成功
+message UnregisterResponse {
+  // 是否成功
+  bool success = 1;
+}
+
+// 状态报告消息
+message HeartbeatRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+  // 模糊器执行数
+  uint64 exec = 2;
+  // 最近执行时间
+  double present_exec = 3;
+  // 最近报告时间
+  // 调用前需将时间戳转换为uint64数据，即距Unix纪元的秒数。
+  // 时间戳对应于C语言中的struct timespec数据结构。
+  uint64 timestamp = 4;
+}
+
+// 状态报告响应
+message HeartbeatResponse {
+  // 是否成功
+  bool success = 1;
+}
+
+// 种子分类
+enum SeedType {
+  // 普通种子
+  NORMAL = 0;
+  // 触发新路径
+  NEW = 1;
+  // 触发崩溃的种子
+  CRASH = 2;
+  // 触发超时的种子
+  HANG = 3;
+}
+
+// 种子数据
+message Seed {
+  // 种子编号,这个为0
+  uint64 id = 1;
+  // 种子类型
+  SeedType seed_type = 2;
+  // 种子长度
+  uint64 length = 3;
+  // 发现该种子的模糊器
+  uint64 fuzzer_id = 4;
+  // 服务端存储路径，这个为空
+  string file_path = 5;
+  // 种子数据
+  bytes data = 6;
+  // 是否存在新覆盖边
+  uint64 has_new_cov = 7;
+}
+
+// ===================== AFL系列配置 ==================================
+
+// 获取种子消息 - 向服务端提供fuzzer_id
+message GetSeedsRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+  // 同步种子id
+  uint64 sync_seed_id = 2;
+}
+
+// 获取种子请求响应消息，成功则得到1..N个种子数据
+message GetSeedsResponse {
+  // 是否成功
+  bool success = 1;
+  // 种子数组
+  repeated Seed seeds = 2;
+}
+
+// 向服务端提交1个种子数据
+message PutSeedRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+  // 单个种子数据
+  Seed seed = 2;
+}
+
+// 提交种子 - 响应
+message PutSeedResponse {
+  // 是否成功
+  bool success = 1;
+}
+
+// 覆盖率结构
+message CoverageData {
+  uint32 index = 1;
+  uint32 count = 2;
+}
+
+// 提交局部覆盖率 - 请求
+message PutCoverageRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+  // 覆盖率信息（每次更新的bit信息）
+  repeated CoverageData bitmap =2;
+  // 覆盖率原因: 种子类型
+  uint32 seed_type = 3;
+}
+
+// 提交局部覆盖率 - 响应
+message PutCoverageResponse {
+  // 根据提交的覆盖率返回响应结果
+  uint32 flag = 1;
+  //  是否成功
+  bool success = 2;
+}
+
+// 提交初始覆盖位图 - 请求
+message PutInitCoverageRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+  // 覆盖率位图
+  bytes coverage_data = 2;
+  // 位图类型
+  uint32 map_flag = 3;
+}
+
+// 提交初始覆盖位图 - 响应
+message PutInitCoverageResponse {
+  // 根据提交的覆盖率返回响应结果
+  uint32 flag = 1;
+  //  是否成功
+  bool success = 2;
+}
+
+
+// 获取初始覆盖位图 - 请求
+message GetInitCoverageRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+  // 位图类型
+  uint32 flag = 2;
+}
+
+// 获取初始覆盖位图 - 响应
+message GetInitCoverageResponse {
+  // 是否成功
+  bool success = 1;
+  // 全员覆盖率位图
+  bytes coverage_data = 2;
+}
+
+
+// 获取全局覆盖率 - 请求
+message GetCoverageRequest {
+  // 模糊器编号
+  uint64 fuzzer_id = 1;
+}
+
+// 获取全局覆盖率 - 响应
+message GetCoverageResponse {
+  // 是否成功
+  bool success = 1;
+  // 全员覆盖率位图
+  bytes coverage_data = 2;
+}
+
+// ===================== ixFuzz系列配置 ==================================
+// 
+// 对应的是 GetSeedsRequest
+message GetSeedsixResponse {
+  bool success = 1;
+  repeated Seed seeds = 2;
+  TraceMap trace_map = 3;
+}
+
+message TraceData{
+  repeated uint64 trace = 1;
+}
+
+message TraceMap{
+  map<string, TraceData> trace_data_map = 1;
+}
+// 对应的是 PutSeedResponse
+message PutSeedixRequest {
+  uint64 fuzzer_id = 1;
+  Seed seed = 2;
+  TraceMap trace_map = 3;
+}
+

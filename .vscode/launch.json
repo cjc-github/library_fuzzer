@@ -1,0 +1,16 @@
+{
+    // rust语言的客户端
+    "version": "0.2.0",
+    "configurations": [{
+            "name":"Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            // "mode": "debug",
+            "program": "${workspaceFolder}/client/target/debug/client",
+            // "env": {},
+            "cwd": "${workspaceFolder}",
+            "args": ["-s", "127.0.0.1:50051"],
+            "externalConsole": false
+        }
+    ]
+}
